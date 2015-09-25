@@ -1,0 +1,87 @@
+---
+title: "Practical Machine Learning Project"
+author: "Dave Porcaro"
+date: "September 25, 2015"
+output: html_document
+---
+### Executive Summary
+
+This is project fits a machine learned algorithm to a data from human worn accelerometers to predict whether the people wearing the data collection devices performed exercises correctly.  Some of the code is suppressed to keep this document brief, but is available for viewing in the .md version.  The end result produced a model with an estimated 97% accuracy and that initially scored 19 of 20 against the validation data.  A second run of the model scored 20 of 20.
+
+####  Download and Examine the data
+
+The data are available at a secure web site and were retrieved with a download.file() command.  Two sets, a testing and a validation, were downloaded.   The validation set was put aside until the very end.  Using R commands str() and summary(), I noticed the training set was a data frame with 19622 observations of 160 variables, many of which were either empty of contained NA. 
+
+```{r download, cache=TRUE, echo=FALSE, results='hide'}
+setInternet2(use = TRUE)
+library(downloader)
+suppressWarnings(download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", destfile = "pml-training.csv", method = "internal"))
+suppressWarnings(download.file("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", destfile = "pml-testing.csv", method = "internal"))
+training <- read.csv("pml-training.csv")
+str(training)
+summary(training)
+library(ggplot2) ## load ggplot for plotting results
+```
+
+####  Clean the data
+
+The easiest way to visualize the data would be to use a tool outside of R.  Fortunately, the data were not too large.  I opened the file in Excel, removed all the columns that would not contribute to a decent model, and used the resulting data to set to work.
+
+```{r clean, echo=FALSE, results='hide'}
+cleandata <- read.csv("cleaned.csv") ## create clean data set from csv file
+sum(is.na(cleandata)) ## check for NA
+str(cleandata, list.len=161)  ## take a quick look at the data
+head(cleandata)
+```
+
+
+#### Divide the Training Data into Training and Testing
+
+The cleaned data was still 19622 observations of 51 variables, fairly large, so I divided the data into 70% training and 30% test.  The test set was put aside and the model is trained only on the training set.
+
+```{r divide, results='hide', warning=FALSE, message=FALSE}
+library(caret)  ##load caret
+library(randomForest)  ## load randomForest
+set.seed(32323)
+inTrain <- createDataPartition(y=cleandata$classe, p=0.7, list=FALSE)  ## we have a large sample size, so split into training 70% and test 30% sets
+training <- cleandata[inTrain,]  ## create training set
+testing <- cleandata[-inTrain,]  ## create test set
+dim(training)
+```
+
+####  Fit a Model
+
+With 51 variables, down from 160, we ideally  want to capture the most variation with the least amount of variables.  I could not find a way to winnow them further, so I kept them all.  For a model, I settled on Random Forest.  Speeding up the processing time while Using Random Forest required pre-processing, in this case PCA.  Code provided by the TA is annotated as such.
+
+```{r fit model, cache=TRUE}
+fitControl <- trainControl(method = "none")  ## recommended by TA to speed up randomForest by turning off cross-validation
+tgrid <- expand.grid(mtry=c(6))  ## more code from Ray.  Why 6?
+modelfit  <- train(classe ~ ., data = training, method = "rf", preProcess="pca", trControl = fitControl, tuneGrid = tgrid)  ## this worked
+modelfit
+```
+
+#### Evaluate the model
+
+After the model was created, a quick plot and a look at the confusionMatrix gave me an idea of how well it might work against the testing data.  (I admit the plot did not provide a whole lot of insight, but I followed Jeff's lead from the video lecture.)  The confusionMatrix seemed to indicate this model would do well.  The out of sample error is not shown due to the suppression of cross validation in random forest, and I found some discussion onine discussion indicating there is no need for cross-validation or a separate test set to get an unbiased estimate of the test set error. 
+
+```{r plotandmatrix, echo=FALSE, cache=TRUE}
+pred <- predict(modelfit, testing)
+qplot(classe, pred, data=testing)
+confusionMatrix(testing$classe, predict(modelfit, testing))
+```
+
+#### Validate
+
+Finally, I created my validation set and ran the model against it using 'predict'.  Taking the output and inserting the results into the Prediction Assignment Submission page, this model scored 19 of 20.  The third answer was incorrect.  I was going to take a page from the Disney character, Elsa, and proposed to "Let It Go," but I ran the model again. Only the third answer changed, so I submitted it and increased the score to 20 of 20.
+
+```{r validate, echo=FALSE}
+validation <- read.csv("pml-testing.csv") ## create validation data set
+predict(modelfit, validation) ## output is a factor of 20 letters with five levels
+```
+
+
+
+
+
+
+
